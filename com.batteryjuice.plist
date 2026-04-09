@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.batteryjuice</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>__PYTHON3__</string>
+        <string>__APP_PY__</string>
+    </array>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <dict>
+        <!-- Restart on crash (non-zero exit), but not when user quits cleanly (exit 0) -->
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>__SUPPORT_DIR__/batteryjuice.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>__SUPPORT_DIR__/batteryjuice_error.log</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
+    </dict>
+</dict>
+</plist>

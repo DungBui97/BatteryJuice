@@ -1,0 +1,124 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build .dmg (${{ matrix.arch }})
+    runs-on: macos-14
+    strategy:
+      matrix:
+        include:
+          - arch: arm64
+            python_arch: arm64
+          - arch: x86_64
+            python_arch: x86_64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          architecture: ${{ matrix.python_arch }}
+
+      - name: Install dependencies
+        run: pip install -r requirements-build.txt
+
+      - name: Build .app with PyInstaller
+        run: |
+          pyinstaller batteryjuice.spec --clean --noconfirm
+          ls -la "dist/BatteryJuice.app"
+
+      - name: Ad-hoc code sign
+        run: |
+          codesign --force --deep --sign - "dist/BatteryJuice.app"
+
+      - name: Package into .dmg
+        id: dmg
+        run: |
+          VERSION="${{ github.ref_name }}"
+          DMG_NAME="BatteryJuice-${VERSION}-${{ matrix.arch }}.dmg"
+          hdiutil create \
+            -volname "BatteryJuice" \
+            -srcfolder "dist/BatteryJuice.app" \
+            -ov -format UDZO \
+            "dist/${DMG_NAME}"
+          echo "dmg_name=${DMG_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload .dmg artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dmg-${{ matrix.arch }}
+          path: dist/${{ steps.dmg.outputs.dmg_name }}
+          retention-days: 1
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist/
+          merge-multiple: true
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          PREV_TAG=$(git tag --sort=-version:refname | sed -n '2p')
+          if [ -n "$PREV_TAG" ]; then
+            LOG=$(git log --pretty="- %s" "${PREV_TAG}..HEAD" | head -30)
+          else
+            LOG=$(git log --pretty="- %s" | head -20)
+          fi
+          echo "changelog<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$LOG" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: BatteryJuice ${{ github.ref_name }}
+          body: |
+            ## What's Changed
+            ${{ steps.changelog.outputs.changelog }}
+
+            ## Installation
+
+            ### macOS (recommended — no dependencies needed)
+            1. Download the `.dmg` for your Mac:
+               - **Apple Silicon (M1/M2/M3/M4)** → `BatteryJuice-*-arm64.dmg`
+               - **Intel Mac** → `BatteryJuice-*-x86_64.dmg`
+            2. Open the `.dmg` and drag **BatteryJuice.app** to your Applications folder
+            3. Double-click to launch — it will appear in your menu bar as 🔋
+
+            > First launch may require right-click → Open due to Gatekeeper (unsigned app).
+
+            ### Developers (from source)
+            ```bash
+            git clone https://github.com/${{ github.repository }}.git
+            cd BatteryJuice
+            ./install.sh
+            ```
+
+            ---
+            *BatteryJuice is free and open source. [Report issues](https://github.com/${{ github.repository }}/issues)*
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          files: |
+            dist/*.dmg

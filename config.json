@@ -1,0 +1,8 @@
+{
+  "report_interval_days": 7,
+  "report_output_dir": "~/Library/Application Support/BatteryJuice/reports",
+  "db_path": "~/Library/Application Support/BatteryJuice/battery.db",
+  "data_retention_days": 365,
+  "temp_alert_celsius": 45,
+  "apple_rated_cycles": 1000
+}
