@@ -39,9 +39,13 @@ jobs:
         run: |
           VERSION="${{ github.ref_name }}"
           DMG_NAME="BatteryJuice-${VERSION}-arm64.dmg"
+          # Create a staging folder with .app + Applications symlink
+          mkdir -p dist/dmg_staging
+          cp -R "dist/BatteryJuice.app" dist/dmg_staging/
+          ln -s /Applications dist/dmg_staging/Applications
           hdiutil create \
             -volname "BatteryJuice" \
-            -srcfolder "dist/BatteryJuice.app" \
+            -srcfolder dist/dmg_staging \
             -ov -format UDZO \
             "dist/${DMG_NAME}"
           echo "dmg_name=${DMG_NAME}" >> "$GITHUB_OUTPUT"
