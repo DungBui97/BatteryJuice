@@ -10,17 +10,8 @@ permissions:
 
 jobs:
   build:
-    name: Build .dmg (${{ matrix.arch }})
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      matrix:
-        include:
-          - arch: arm64
-            runner: macos-14
-            python_arch: arm64
-          - arch: x86_64
-            runner: macos-13
-            python_arch: x86_64
+    name: Build .dmg (arm64)
+    runs-on: macos-14
 
     steps:
       - name: Checkout
@@ -30,7 +21,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          architecture: ${{ matrix.python_arch }}
 
       - name: Install dependencies
         run: pip install -r requirements-build.txt
@@ -48,7 +38,7 @@ jobs:
         id: dmg
         run: |
           VERSION="${{ github.ref_name }}"
-          DMG_NAME="BatteryJuice-${VERSION}-${{ matrix.arch }}.dmg"
+          DMG_NAME="BatteryJuice-${VERSION}-arm64.dmg"
           hdiutil create \
             -volname "BatteryJuice" \
             -srcfolder "dist/BatteryJuice.app" \
@@ -59,7 +49,7 @@ jobs:
       - name: Upload .dmg artifact
         uses: actions/upload-artifact@v4
         with:
-          name: dmg-${{ matrix.arch }}
+          name: dmg-arm64
           path: dist/${{ steps.dmg.outputs.dmg_name }}
           retention-days: 1
 
@@ -102,16 +92,14 @@ jobs:
 
             ## Installation
 
-            ### macOS (recommended — no dependencies needed)
-            1. Download the `.dmg` for your Mac:
-               - **Apple Silicon (M1/M2/M3/M4)** → `BatteryJuice-*-arm64.dmg`
-               - **Intel Mac** → `BatteryJuice-*-x86_64.dmg`
+            ### macOS Apple Silicon — no dependencies needed
+            1. Download `BatteryJuice-*-arm64.dmg`
             2. Open the `.dmg` and drag **BatteryJuice.app** to your Applications folder
             3. Double-click to launch — it will appear in your menu bar as 🔋
 
-            > First launch may require right-click → Open due to Gatekeeper (unsigned app).
+            > First launch may require right-click → **Open** due to Gatekeeper (unsigned app).
 
-            ### Developers (from source)
+            ### Developers (from source — also works on Intel)
             ```bash
             git clone https://github.com/${{ github.repository }}.git
             cd BatteryJuice

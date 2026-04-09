@@ -74,7 +74,7 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name='BatteryJuice.app',
-    icon='assets/icon.icns',
+    icon=None,  # TODO: add assets/icon.icns for custom app icon
     bundle_identifier='com.batteryjuice',
     info_plist={
         'CFBundleName': 'BatteryJuice',
