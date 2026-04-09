@@ -11,13 +11,15 @@ permissions:
 jobs:
   build:
     name: Build .dmg (${{ matrix.arch }})
-    runs-on: macos-14
+    runs-on: ${{ matrix.runner }}
     strategy:
       matrix:
         include:
           - arch: arm64
+            runner: macos-14
             python_arch: arm64
           - arch: x86_64
+            runner: macos-13
             python_arch: x86_64
 
     steps:
