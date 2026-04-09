@@ -6,6 +6,8 @@ Entry point. Run with: python3 src/app.py
 from __future__ import annotations
 
 import json
+import os
+import plistlib
 import subprocess
 import sys
 import threading
@@ -45,6 +47,43 @@ def _load_config() -> dict:
     for k, v in _DEFAULT_CONFIG.items():
         cfg.setdefault(k, v)
     return cfg
+
+
+# ── launch at login ───────────────────────────────────────────────────────────
+
+_PLIST_LABEL = "com.batteryjuice"
+_PLIST_PATH  = Path.home() / "Library" / "LaunchAgents" / "com.batteryjuice.plist"
+
+
+def _is_launch_at_login() -> bool:
+    return _PLIST_PATH.exists()
+
+
+def _enable_launch_at_login() -> None:
+    _PLIST_PATH.parent.mkdir(parents=True, exist_ok=True)
+    plist_data = {
+        "Label": _PLIST_LABEL,
+        "ProgramArguments": [sys.executable],
+        "RunAtLoad": True,
+        "KeepAlive": {"SuccessfulExit": False},
+        "StandardOutPath": str(Path.home() / "Library" / "Logs" / "BatteryJuice.log"),
+        "StandardErrorPath": str(Path.home() / "Library" / "Logs" / "BatteryJuice.log"),
+    }
+    with open(_PLIST_PATH, "wb") as f:
+        plistlib.dump(plist_data, f)
+    gui = f"gui/{os.getuid()}"
+    result = subprocess.run(
+        ["launchctl", "bootstrap", gui, str(_PLIST_PATH)],
+        capture_output=True,
+    )
+    # If already loaded, that's fine
+    _ = result
+
+
+def _disable_launch_at_login() -> None:
+    gui_label = f"gui/{os.getuid()}/{_PLIST_LABEL}"
+    subprocess.run(["launchctl", "bootout", gui_label], capture_output=True)
+    _PLIST_PATH.unlink(missing_ok=True)
 
 
 _DEFAULT_CONFIG = {
@@ -96,6 +135,12 @@ class BatteryJuiceApp(rumps.App):
         self._latest: dict | None = None
         self._tip_index: int = 0
         self._pending_past_reports_rebuild: bool = False
+
+        # Auto-enable Launch at Login on first-ever run (new DMG install)
+        self._first_run = not _is_launch_at_login() and not (_support_dir() / ".launch_pref_set").exists()
+        if self._first_run:
+            _enable_launch_at_login()
+            (_support_dir() / ".launch_pref_set").touch()
 
         # Build initial menu
         self._build_menu()
@@ -220,6 +265,12 @@ class BatteryJuiceApp(rumps.App):
         self._item_advisory  = rumps.MenuItem("⚠ Advisory")
         self._item_tip       = rumps.MenuItem("💡 Tip: loading…")
 
+        self._item_launch_at_login = rumps.MenuItem(
+            "Launch at Login",
+            callback=self._on_toggle_launch_at_login,
+        )
+        self._item_launch_at_login.state = _is_launch_at_login()
+
         self.menu = [
             self._item_health,
             self._item_cycles,
@@ -237,7 +288,10 @@ class BatteryJuiceApp(rumps.App):
             rumps.MenuItem("Export CSV…", callback=self._on_export_csv),
             rumps.MenuItem("Open Reports Folder", callback=self._on_open_reports),
             None,
+            self._item_launch_at_login,
             rumps.MenuItem("Preferences…", callback=self._on_preferences),
+            rumps.MenuItem("Uninstall BatteryJuice…", callback=self._on_uninstall),
+            None,
             rumps.MenuItem("Quit", callback=rumps.quit_application),
         ]
 
@@ -365,6 +419,41 @@ class BatteryJuiceApp(rumps.App):
         folder = Path(self.config["report_output_dir"]).expanduser()
         folder.mkdir(parents=True, exist_ok=True)
         subprocess.run(["open", str(folder)])
+
+    def _on_toggle_launch_at_login(self, sender):
+        if _is_launch_at_login():
+            _disable_launch_at_login()
+            sender.state = False
+        else:
+            _enable_launch_at_login()
+            sender.state = True
+        # Mark that user has set preference explicitly
+        (_support_dir() / ".launch_pref_set").touch()
+
+    def _on_uninstall(self, _):
+        resp = rumps.alert(
+            title="Uninstall BatteryJuice",
+            message=(
+                "This will remove BatteryJuice from Login Items.\n\n"
+                "Do you also want to delete all battery data and reports?\n"
+                "(The app itself must be dragged to Trash manually.)"
+            ),
+            ok="Remove Login Item Only",
+            cancel="Cancel",
+            other="Remove Login Item + Data",
+        )
+        if resp == 0:   # Cancel
+            return
+        # Always disable launch at login
+        _disable_launch_at_login()
+        (_support_dir() / ".launch_pref_set").unlink(missing_ok=True)
+        if resp == 2:   # "Remove Login Item + Data"
+            import shutil
+            shutil.rmtree(str(_support_dir()), ignore_errors=True)
+            rumps.notification("BatteryJuice", "Uninstalled", "Login item and all data removed. Drag BatteryJuice.app to Trash to finish.")
+        else:
+            rumps.notification("BatteryJuice", "Uninstalled", "Login item removed. Data kept. Drag BatteryJuice.app to Trash to finish.")
+        rumps.quit_application()
 
     @rumps.clicked("Preferences…")
     def _on_preferences(self, _):
